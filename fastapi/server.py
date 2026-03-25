@@ -4,7 +4,7 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, engine, Base
-from models import LibroDB, UsuarioDB
+from models import LibroDB, UsuarioDB, PrestamoDB
 
 Base.metadata.create_all(bind=engine)
 
@@ -29,6 +29,11 @@ class Usuario(PydanticBaseModel):
 
 class ListadoUsuarios(PydanticBaseModel):
     usuarios: List[Usuario] = []
+
+
+class Prestamo(PydanticBaseModel):
+    libro_id: int
+    usuario_id: int
 
 
 app = FastAPI(
@@ -116,5 +121,32 @@ def create_user(usuario: Usuario, db: Session = Depends(get_db)):
 
 
 @app.post("/prestamos/")
-async def create_loan(libro_id: int):
-    return {"message": "Préstamo creado (no realmente)", "libro_id": libro_id}
+def create_loan(prestamo: Prestamo, db: Session = Depends(get_db)):
+    libro = db.query(LibroDB).filter(LibroDB.id == prestamo.libro_id).first()
+    usuario = db.query(UsuarioDB).filter(UsuarioDB.id == prestamo.usuario_id).first()
+
+    if not libro:
+        return {"error": "Libro no encontrado"}
+
+    if not usuario:
+        return {"error": "Usuario no encontrado"}
+
+    if not libro.disponible:
+        return {"error": "El libro ya está prestado"}
+
+    nuevo_prestamo = PrestamoDB(
+        libro_id=prestamo.libro_id,
+        usuario_id=prestamo.usuario_id,
+        activo=True
+    )
+    db.add(nuevo_prestamo)
+
+    libro.disponible = False
+
+    db.commit()
+    db.refresh(nuevo_prestamo)
+
+    return {
+        "mensaje": "Préstamo realizado correctamente",
+        "prestamo_id": nuevo_prestamo.id
+    }
