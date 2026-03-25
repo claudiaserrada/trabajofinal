@@ -13,6 +13,7 @@ try:
     usuarios = usuarios_response.json().get("usuarios", [])
 
     libros_disponibles = [libro for libro in libros if libro["disponible"]]
+    libros_prestados = [libro for libro in libros if not libro["disponible"]]
 
     if not libros_disponibles:
         st.info("No hay libros disponibles para préstamo.")
@@ -45,6 +46,29 @@ try:
                 st.error(data["error"])
             else:
                 st.success("Préstamo realizado correctamente")
+
+    st.subheader("Devolver libro")
+
+    if not libros_prestados:
+        st.info("No hay libros prestados para devolver.")
+    else:
+        devolucion_opciones = {
+            f'{libro["id"]} - {libro["titulo"]}': libro["id"]
+            for libro in libros_prestados
+        }
+
+        libro_a_devolver = st.selectbox("Selecciona un libro prestado", list(devolucion_opciones.keys()))
+
+        if st.button("Devolver libro"):
+            libro_id = devolucion_opciones[libro_a_devolver]
+
+            response = requests.put(f"{API_URL}/devoluciones/{libro_id}")
+            data = response.json()
+
+            if "error" in data:
+                st.error(data["error"])
+            else:
+                st.success("Libro devuelto correctamente")
 
 except Exception as e:
     st.error(f"Error de conexión: {e}")
