@@ -60,6 +60,7 @@ def inicio():
 @app.get("/libros", response_model=ListadoLibros)
 def listar_libros(db: Session = Depends(get_db)):
     libros_db = db.query(LibroDB).all()
+
     return ListadoLibros(
         libros=[
             Libro(
@@ -67,7 +68,7 @@ def listar_libros(db: Session = Depends(get_db)):
                 titulo=libro.titulo,
                 autor=libro.autor,
                 genero=libro.genero,
-                disponible=libro.disponible,
+                disponible=libro.disponible
             )
             for libro in libros_db
         ]
@@ -83,26 +84,31 @@ def crear_libro(libro: Libro, db: Session = Depends(get_db)):
         titulo=libro.titulo,
         autor=libro.autor,
         genero=libro.genero,
-        disponible=True,
+        disponible=True
     )
+
     db.add(nuevo_libro)
     db.commit()
     db.refresh(nuevo_libro)
 
-    return {"mensaje": "Libro añadido correctamente", "id": nuevo_libro.id}
+    return {
+        "mensaje": "Libro añadido correctamente",
+        "id": nuevo_libro.id
+    }
 
 
 @app.get("/usuarios", response_model=ListadoUsuarios)
 def listar_usuarios(db: Session = Depends(get_db)):
     usuarios_db = db.query(UsuarioDB).all()
+
     return ListadoUsuarios(
         usuarios=[
             Usuario(
-                id=u.id,
-                nombre=u.nombre,
-                email=u.email,
+                id=usuario.id,
+                nombre=usuario.nombre,
+                email=usuario.email
             )
-            for u in usuarios_db
+            for usuario in usuarios_db
         ]
     )
 
@@ -112,19 +118,23 @@ def crear_usuario(usuario: Usuario, db: Session = Depends(get_db)):
     if not usuario.nombre.strip() or not usuario.email.strip():
         raise HTTPException(status_code=400, detail="Nombre y email son obligatorios")
 
-    existente = db.query(UsuarioDB).filter(UsuarioDB.email == usuario.email).first()
-    if existente:
+    usuario_existente = db.query(UsuarioDB).filter(UsuarioDB.email == usuario.email).first()
+    if usuario_existente:
         raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
 
     nuevo_usuario = UsuarioDB(
         nombre=usuario.nombre,
-        email=usuario.email,
+        email=usuario.email
     )
+
     db.add(nuevo_usuario)
     db.commit()
     db.refresh(nuevo_usuario)
 
-    return {"mensaje": "Usuario creado correctamente", "id": nuevo_usuario.id}
+    return {
+        "mensaje": "Usuario creado correctamente",
+        "id": nuevo_usuario.id
+    }
 
 
 @app.post("/prestamos")
@@ -143,7 +153,7 @@ def realizar_prestamo(prestamo: Prestamo, db: Session = Depends(get_db)):
     nuevo_prestamo = PrestamoDB(
         libro_id=prestamo.libro_id,
         usuario_id=prestamo.usuario_id,
-        devuelto=False,
+        devuelto=False
     )
 
     libro.disponible = False
@@ -152,7 +162,10 @@ def realizar_prestamo(prestamo: Prestamo, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(nuevo_prestamo)
 
-    return {"mensaje": "Préstamo realizado correctamente", "id": nuevo_prestamo.id}
+    return {
+        "mensaje": "Préstamo realizado correctamente",
+        "id": nuevo_prestamo.id
+    }
 
 
 @app.post("/devoluciones")
