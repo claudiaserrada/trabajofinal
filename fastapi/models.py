@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
 from database import Base
 
 
@@ -18,3 +18,12 @@ class UsuarioDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
+
+
+class PrestamoDB(Base):
+    __tablename__ = "prestamos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    libro_id = Column(Integer, ForeignKey("libros.id"), nullable=False)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    activo = Column(Boolean, default=True)
