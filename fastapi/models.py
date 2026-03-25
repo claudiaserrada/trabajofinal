@@ -26,4 +26,4 @@ class PrestamoDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     libro_id = Column(Integer, ForeignKey("libros.id"), nullable=False)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    activo = Column(Boolean, default=True)
+    devuelto = Column(Boolean, default=False)True)
