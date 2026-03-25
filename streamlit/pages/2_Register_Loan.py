@@ -1,33 +1,50 @@
 import streamlit as st
 import requests
 
-st.set_page_config(page_title="Préstamo de Libros", page_icon="✍️")
-
-st.markdown("# Gestionar Préstamo")
-st.write("Formulario para realizar un préstamo.")
-
 API_URL = "http://fastapi:8000"
 
-with st.form("loan_form"):
-    libro_id = st.number_input("ID del Libro", min_value=1, step=1)
-    usuario_id = st.text_input("ID de Usuario")
-    submitted = st.form_submit_button("Realizar Préstamo")
+st.title("Registrar préstamo")
 
-    if submitted:
-        # STUDENT TASK: Implement the actual POST request logic properly
-        st.info(f"Intentando prestar libro {libro_id} al usuario {usuario_id}...")
-        
-        try:
-            # INEFFICIENCY: Not checking if payload structure matches what server expects
-            response = requests.post(f"{API_URL}/prestamos/?libro_id={libro_id}")
-            
-            if response.status_code == 200:
-                st.success("Préstamo registrado (simulado).")
-                st.json(response.json())
+try:
+    libros_response = requests.get(f"{API_URL}/libros/")
+    usuarios_response = requests.get(f"{API_URL}/usuarios/")
+
+    libros = libros_response.json().get("libros", [])
+    usuarios = usuarios_response.json().get("usuarios", [])
+
+    libros_disponibles = [libro for libro in libros if libro["disponible"]]
+
+    if not libros_disponibles:
+        st.info("No hay libros disponibles para préstamo.")
+    elif not usuarios:
+        st.info("No hay usuarios registrados.")
+    else:
+        libro_opciones = {
+            f'{libro["id"]} - {libro["titulo"]}': libro["id"]
+            for libro in libros_disponibles
+        }
+
+        usuario_opciones = {
+            f'{usuario["id"]} - {usuario["nombre"]} ({usuario["email"]})': usuario["id"]
+            for usuario in usuarios
+        }
+
+        libro_seleccionado = st.selectbox("Selecciona un libro", list(libro_opciones.keys()))
+        usuario_seleccionado = st.selectbox("Selecciona un usuario", list(usuario_opciones.keys()))
+
+        if st.button("Registrar préstamo"):
+            payload = {
+                "libro_id": libro_opciones[libro_seleccionado],
+                "usuario_id": usuario_opciones[usuario_seleccionado]
+            }
+
+            response = requests.post(f"{API_URL}/prestamos/", json=payload)
+            data = response.json()
+
+            if "error" in data:
+                st.error(data["error"])
             else:
-                st.error("Error al registrar préstamo.")
-        except Exception as e:
-            st.error(f"Error de conexión: {e}")
+                st.success("Préstamo realizado correctamente")
 
-st.markdown("---")
-st.warning("⚠️ Este formulario es un esqueleto. Falta validación y gestión de errores real.")
+except Exception as e:
+    st.error(f"Error de conexión: {e}")
