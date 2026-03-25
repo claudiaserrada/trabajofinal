@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel as PydanticBaseModel
 from typing import List
 from sqlalchemy.orm import Session
@@ -36,11 +36,12 @@ class Prestamo(PydanticBaseModel):
     usuario_id: int
 
 
-app = FastAPI(
-    title="Gestor de Bibliotecas API",
-    description="Servidor de datos para la gestión de bibliotecas.",
-    version="1.0.0",
-)
+class Devolucion(PydanticBaseModel):
+    libro_id: int
+    usuario_id: int
+
+
+app = FastAPI()
 
 
 def get_db():
@@ -51,129 +52,134 @@ def get_db():
         db.close()
 
 
-@app.get("/libros/")
-def retrieve_data(db: Session = Depends(get_db)):
+@app.get("/")
+def inicio():
+    return {"mensaje": "API biblioteca funcionando"}
+
+
+@app.get("/libros", response_model=ListadoLibros)
+def listar_libros(db: Session = Depends(get_db)):
     libros_db = db.query(LibroDB).all()
-    libros = [
-        {
-            "id": libro.id,
-            "titulo": libro.titulo,
-            "autor": libro.autor,
-            "genero": libro.genero,
-            "disponible": libro.disponible,
-        }
-        for libro in libros_db
-    ]
-    return {"libros": libros}
+    return ListadoLibros(
+        libros=[
+            Libro(
+                id=libro.id,
+                titulo=libro.titulo,
+                autor=libro.autor,
+                genero=libro.genero,
+                disponible=libro.disponible,
+            )
+            for libro in libros_db
+        ]
+    )
 
 
-@app.post("/libros/")
-def create_book(libro: Libro, db: Session = Depends(get_db)):
+@app.post("/libros")
+def crear_libro(libro: Libro, db: Session = Depends(get_db)):
+    if not libro.titulo.strip() or not libro.autor.strip() or not libro.genero.strip():
+        raise HTTPException(status_code=400, detail="Todos los campos son obligatorios")
+
     nuevo_libro = LibroDB(
         titulo=libro.titulo,
         autor=libro.autor,
         genero=libro.genero,
-        disponible=True
+        disponible=True,
     )
     db.add(nuevo_libro)
     db.commit()
     db.refresh(nuevo_libro)
 
-    return {
-        "mensaje": "Libro añadido correctamente",
-        "id": nuevo_libro.id
-    }
+    return {"mensaje": "Libro añadido correctamente", "id": nuevo_libro.id}
 
 
-@app.get("/usuarios/")
-def get_users(db: Session = Depends(get_db)):
+@app.get("/usuarios", response_model=ListadoUsuarios)
+def listar_usuarios(db: Session = Depends(get_db)):
     usuarios_db = db.query(UsuarioDB).all()
-    usuarios = [
-        {
-            "id": usuario.id,
-            "nombre": usuario.nombre,
-            "email": usuario.email,
-        }
-        for usuario in usuarios_db
-    ]
-    return {"usuarios": usuarios}
+    return ListadoUsuarios(
+        usuarios=[
+            Usuario(
+                id=u.id,
+                nombre=u.nombre,
+                email=u.email,
+            )
+            for u in usuarios_db
+        ]
+    )
 
 
-@app.post("/usuarios/")
-def create_user(usuario: Usuario, db: Session = Depends(get_db)):
-    existe = db.query(UsuarioDB).filter(UsuarioDB.email == usuario.email).first()
+@app.post("/usuarios")
+def crear_usuario(usuario: Usuario, db: Session = Depends(get_db)):
+    if not usuario.nombre.strip() or not usuario.email.strip():
+        raise HTTPException(status_code=400, detail="Nombre y email son obligatorios")
 
-    if existe:
-        return {"error": "Ese email ya está registrado"}
+    existente = db.query(UsuarioDB).filter(UsuarioDB.email == usuario.email).first()
+    if existente:
+        raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
 
     nuevo_usuario = UsuarioDB(
         nombre=usuario.nombre,
-        email=usuario.email
+        email=usuario.email,
     )
     db.add(nuevo_usuario)
     db.commit()
     db.refresh(nuevo_usuario)
 
-    return {
-        "mensaje": "Usuario creado correctamente",
-        "id": nuevo_usuario.id
-    }
+    return {"mensaje": "Usuario creado correctamente", "id": nuevo_usuario.id}
 
 
-@app.post("/prestamos/")
-def create_loan(prestamo: Prestamo, db: Session = Depends(get_db)):
+@app.post("/prestamos")
+def realizar_prestamo(prestamo: Prestamo, db: Session = Depends(get_db)):
     libro = db.query(LibroDB).filter(LibroDB.id == prestamo.libro_id).first()
-    usuario = db.query(UsuarioDB).filter(UsuarioDB.id == prestamo.usuario_id).first()
-
     if not libro:
-        return {"error": "Libro no encontrado"}
+        raise HTTPException(status_code=404, detail="El libro no existe")
 
+    usuario = db.query(UsuarioDB).filter(UsuarioDB.id == prestamo.usuario_id).first()
     if not usuario:
-        return {"error": "Usuario no encontrado"}
+        raise HTTPException(status_code=404, detail="El usuario no existe")
 
     if not libro.disponible:
-        return {"error": "El libro ya está prestado"}
+        raise HTTPException(status_code=400, detail="El libro ya está prestado")
 
     nuevo_prestamo = PrestamoDB(
         libro_id=prestamo.libro_id,
         usuario_id=prestamo.usuario_id,
-        activo=True
+        devuelto=False,
     )
-    db.add(nuevo_prestamo)
 
     libro.disponible = False
 
+    db.add(nuevo_prestamo)
     db.commit()
     db.refresh(nuevo_prestamo)
 
-    return {
-        "mensaje": "Préstamo realizado correctamente",
-        "prestamo_id": nuevo_prestamo.id
-    }
+    return {"mensaje": "Préstamo realizado correctamente", "id": nuevo_prestamo.id}
 
 
-@app.put("/devoluciones/{libro_id}")
-def return_book(libro_id: int, db: Session = Depends(get_db)):
-    libro = db.query(LibroDB).filter(LibroDB.id == libro_id).first()
-
-    if not libro:
-        return {"error": "Libro no encontrado"}
-
-    if libro.disponible:
-        return {"error": "El libro ya está disponible"}
-
+@app.post("/devoluciones")
+def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
     prestamo_activo = (
         db.query(PrestamoDB)
-        .filter(PrestamoDB.libro_id == libro_id, PrestamoDB.activo == True)
+        .filter(
+            PrestamoDB.libro_id == devolucion.libro_id,
+            PrestamoDB.usuario_id == devolucion.usuario_id,
+            PrestamoDB.devuelto == False
+        )
         .first()
     )
 
     if not prestamo_activo:
-        return {"error": "No existe un préstamo activo para este libro"}
+        raise HTTPException(
+            status_code=404,
+            detail="No existe un préstamo activo para ese libro y usuario"
+        )
 
-    prestamo_activo.activo = False
+    libro = db.query(LibroDB).filter(LibroDB.id == devolucion.libro_id).first()
+    if not libro:
+        raise HTTPException(status_code=404, detail="El libro no existe")
+
+    prestamo_activo.devuelto = True
     libro.disponible = True
 
     db.commit()
 
-    return {"mensaje": "Libro devuelto correctamente"}
+    return {"mensaje": "Devolución registrada correctamente"}
