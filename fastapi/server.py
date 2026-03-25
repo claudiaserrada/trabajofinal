@@ -1,20 +1,21 @@
-from fastapi import FastAPI
-import pandas as pd
-from typing import List
+from fastapi import FastAPI, Depends
 from pydantic import BaseModel as PydanticBaseModel
+from typing import List
+from sqlalchemy.orm import Session
 
-class BaseModel(PydanticBaseModel):
-    class Config:
-        arbitrary_types_allowed = True
+from database import SessionLocal, engine, Base
+from models import LibroDB
 
-class Libro(BaseModel):
-    id: int
+Base.metadata.create_all(bind=engine)
+
+class Libro(PydanticBaseModel):
+    id: int | None = None
     titulo: str
     autor: str
     genero: str
-    disponible: bool
+    disponible: bool = True
 
-class ListadoLibros(BaseModel):
+class ListadoLibros(PydanticBaseModel):
     libros: List[Libro] = []
 
 app = FastAPI(
@@ -23,45 +24,45 @@ app = FastAPI(
     version="1.0.0",
 )
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 @app.get("/libros/")
-def retrieve_data():
-    # EDUCATIONAL INEFFICIENCY: Reading CSV on every request
-    # Students should optimize this by using a database or caching
-    try:
-        todosmisdatos = pd.read_csv('./books.csv', sep=';')
-        todosmisdatos = todosmisdatos.fillna(0)
-        todosmisdatosdict = todosmisdatos.to_dict(orient='records')
-        listado = ListadoLibros()
-        listado.libros = todosmisdatosdict
-        return listado
-    except Exception as e:
-        return {"error": str(e)}
-@app.post("/libros/")
-def create_book(libro: Libro):
-    try:
-        df = pd.read_csv('./books.csv', sep=';')
-
-        if not df.empty:
-            new_id = int(df["id"].max()) + 1
-        else:
-            new_id = 1
-
-        nuevo_libro = {
-            "id": new_id,
+def retrieve_data(db: Session = Depends(get_db)):
+    libros_db = db.query(LibroDB).all()
+    libros = [
+        {
+            "id": libro.id,
             "titulo": libro.titulo,
             "autor": libro.autor,
             "genero": libro.genero,
-            "disponible": True
+            "disponible": libro.disponible,
         }
+        for libro in libros_db
+    ]
+    return {"libros": libros}
 
-        df = pd.concat([df, pd.DataFrame([nuevo_libro])], ignore_index=True)
-        df.to_csv('./books.csv', sep=';', index=False)
+@app.post("/libros/")
+def create_book(libro: Libro, db: Session = Depends(get_db)):
+    nuevo_libro = LibroDB(
+        titulo=libro.titulo,
+        autor=libro.autor,
+        genero=libro.genero,
+        disponible=True
+    )
+    db.add(nuevo_libro)
+    db.commit()
+    db.refresh(nuevo_libro)
 
-        return {"mensaje": "Libro añadido correctamente"}
+    return {
+        "mensaje": "Libro añadido correctamente",
+        "id": nuevo_libro.id
+    }
 
-    except Exception as e:
-        return {"error": str(e)}
 @app.post("/prestamos/")
 async def create_loan(libro_id: int):
-    # This is a stub for students to implement
     return {"message": "Préstamo creado (no realmente)", "libro_id": libro_id}
