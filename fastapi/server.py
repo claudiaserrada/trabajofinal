@@ -150,18 +150,30 @@ def create_loan(prestamo: Prestamo, db: Session = Depends(get_db)):
         "mensaje": "Préstamo realizado correctamente",
         "prestamo_id": nuevo_prestamo.id
     }
-@app.put("/libros/devolver/{libro_id}")
-def devolver_libro(libro_id: int):
-    try:
-        df = pd.read_csv('./books.csv', sep=';')
 
-        if libro_id not in df["id"].values:
-            return {"error": "Libro no encontrado"}
 
-        df.loc[df["id"] == libro_id, "disponible"] = True
-        df.to_csv('./books.csv', sep=';', index=False)
+@app.put("/devoluciones/{libro_id}")
+def return_book(libro_id: int, db: Session = Depends(get_db)):
+    libro = db.query(LibroDB).filter(LibroDB.id == libro_id).first()
 
-        return {"mensaje": "Libro devuelto correctamente"}
+    if not libro:
+        return {"error": "Libro no encontrado"}
 
-    except Exception as e:
-        return {"error": str(e)}
+    if libro.disponible:
+        return {"error": "El libro ya está disponible"}
+
+    prestamo_activo = (
+        db.query(PrestamoDB)
+        .filter(PrestamoDB.libro_id == libro_id, PrestamoDB.activo == True)
+        .first()
+    )
+
+    if not prestamo_activo:
+        return {"error": "No existe un préstamo activo para este libro"}
+
+    prestamo_activo.activo = False
+    libro.disponible = True
+
+    db.commit()
+
+    return {"mensaje": "Libro devuelto correctamente"}
