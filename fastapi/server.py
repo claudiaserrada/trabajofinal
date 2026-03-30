@@ -170,29 +170,29 @@ def realizar_prestamo(prestamo: Prestamo, db: Session = Depends(get_db)):
 
 @app.post("/devoluciones")
 def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
-    prestamo_activo = (
-        db.query(PrestamoDB)
-        .filter(
-            PrestamoDB.libro_id == devolucion.libro_id,
-            PrestamoDB.usuario_id == devolucion.usuario_id,
-            PrestamoDB.devuelto == False
-        )
-        .first()
-    )
+    prestamo_activo = db.query(PrestamoDB).filter(
+        PrestamoDB.libro_id == devolucion.libro_id,
+        PrestamoDB.usuario_id == devolucion.usuario_id,
+        PrestamoDB.devuelto == False
+    ).first()
 
     if not prestamo_activo:
-        raise HTTPException(
-            status_code=404,
-            detail="No existe un préstamo activo para ese libro y usuario"
-        )
+        raise HTTPException(status_code=404, detail="No hay préstamo activo")
 
     libro = db.query(LibroDB).filter(LibroDB.id == devolucion.libro_id).first()
-    if not libro:
-        raise HTTPException(status_code=404, detail="El libro no existe")
 
     prestamo_activo.devuelto = True
     libro.disponible = True
 
-    db.commit()
+    # Fuerza la sesión
+    db.add(prestamo_activo)
+    db.add(libro)
 
-    return {"mensaje": "Devolución registrada correctamente"}
+    try:
+        db.commit()
+        db.refresh(libro)  # Esto obliga a SQLAlchemy a volver a leer de la DB
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+    return {"mensaje": "Devolución registrada", "libro_estado": libro.disponible}

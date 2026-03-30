@@ -59,10 +59,20 @@ try:
 
         libro_a_devolver = st.selectbox("Selecciona un libro prestado", list(devolucion_opciones.keys()))
 
+
         if st.button("Devolver libro"):
+
+           # payload = {
+           #     "libro_id": libro_id,
+           #     "usuario_id": usuario_id  # <--- Ojo jóvenes, tenéis que enviar esto
+           # }
+
+            # Luego la llamada la cambiáis. Yo os la he cambiado ya a post  para coincidir con  @app.post("/devoluciones")
+            # response = requests.post(f"{API_URL}/devoluciones", json=payload)
+
             libro_id = devolucion_opciones[libro_a_devolver]
 
-            response = requests.put(f"{API_URL}/devoluciones/{libro_id}")
+            response = requests.post(f"{API_URL}/devoluciones/{libro_id}")
             data = response.json()
 
             if "error" in data:
@@ -70,5 +80,6 @@ try:
             else:
                 st.success("Libro devuelto correctamente")
 
+            st.rerun()
 except Exception as e:
     st.error(f"Error de conexión: {e}")
