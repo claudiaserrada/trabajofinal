@@ -170,7 +170,6 @@ def realizar_prestamo(prestamo: Prestamo, db: Session = Depends(get_db)):
 
 @app.put("/devoluciones")
 def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
-def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
     prestamo_activo = db.query(PrestamoDB).filter(
         PrestamoDB.libro_id == devolucion.libro_id,
         PrestamoDB.usuario_id == devolucion.usuario_id,
@@ -185,13 +184,12 @@ def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
     prestamo_activo.devuelto = True
     libro.disponible = True
 
-    # Fuerza la sesión
     db.add(prestamo_activo)
     db.add(libro)
 
     try:
         db.commit()
-        db.refresh(libro)  # Esto obliga a SQLAlchemy a volver a leer de la DB
+        db.refresh(libro)
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
