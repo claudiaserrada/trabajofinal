@@ -167,4 +167,30 @@ def realizar_prestamo(prestamo: Prestamo, db: Session = Depends(get_db)):
         "id": nuevo_prestamo.id
     }
 
+@app.put("/devoluciones")
+def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
+    prestamo_activo = db.query(PrestamoDB).filter(
+        PrestamoDB.libro_id == devolucion.libro_id,
+        PrestamoDB.usuario_id == devolucion.usuario_id,
+        PrestamoDB.devuelto == False
+    ).first()
 
+    if not prestamo_activo:
+        raise HTTPException(status_code=404, detail="No hay préstamo activo")
+
+    libro = db.query(LibroDB).filter(LibroDB.id == devolucion.libro_id).first()
+
+    prestamo_activo.devuelto = True
+    libro.disponible = True
+
+    db.add(prestamo_activo)
+    db.add(libro)
+
+    try:
+        db.commit()
+        db.refresh(libro)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+    return {"mensaje": "Devolución registrada", "libro_estado": libro.disponible}
