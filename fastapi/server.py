@@ -168,7 +168,8 @@ def realizar_prestamo(prestamo: Prestamo, db: Session = Depends(get_db)):
     }
 
 
-@app.post("/devoluciones")
+@app.put("/devoluciones")
+def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
 def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
     prestamo_activo = db.query(PrestamoDB).filter(
         PrestamoDB.libro_id == devolucion.libro_id,
