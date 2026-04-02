@@ -41,7 +41,11 @@ class Devolucion(PydanticBaseModel):
     usuario_id: int
 
 
-app = FastAPI()
+app = FastAPI(
+    title="Gestor de Bibliotecas API",
+    description="Servidor de datos para la gestión de bibliotecas.",
+    version="1.0.0",
+)
 
 
 def get_db():
@@ -153,7 +157,7 @@ def realizar_prestamo(prestamo: Prestamo, db: Session = Depends(get_db)):
     nuevo_prestamo = PrestamoDB(
         libro_id=prestamo.libro_id,
         usuario_id=prestamo.usuario_id,
-        devuelto=False
+        activo=True
     )
 
     libro.disponible = False
@@ -167,20 +171,23 @@ def realizar_prestamo(prestamo: Prestamo, db: Session = Depends(get_db)):
         "id": nuevo_prestamo.id
     }
 
+
 @app.put("/devoluciones")
 def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
     prestamo_activo = db.query(PrestamoDB).filter(
         PrestamoDB.libro_id == devolucion.libro_id,
         PrestamoDB.usuario_id == devolucion.usuario_id,
-        PrestamoDB.devuelto == False
+        PrestamoDB.activo == True
     ).first()
 
     if not prestamo_activo:
         raise HTTPException(status_code=404, detail="No hay préstamo activo")
 
     libro = db.query(LibroDB).filter(LibroDB.id == devolucion.libro_id).first()
+    if not libro:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
 
-    prestamo_activo.devuelto = True
+    prestamo_activo.activo = False
     libro.disponible = True
 
     db.add(prestamo_activo)
@@ -193,4 +200,7 @@ def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-    return {"mensaje": "Devolución registrada", "libro_estado": libro.disponible}
+    return {
+        "mensaje": "Devolución registrada correctamente",
+        "libro_estado": libro.disponible
+    }
