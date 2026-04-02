@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel as PydanticBaseModel
 from typing import List
 from sqlalchemy.orm import Session
+from datetime import date
 
 from database import SessionLocal, engine, Base
 from models import LibroDB, UsuarioDB, PrestamoDB
@@ -39,6 +40,19 @@ class Prestamo(PydanticBaseModel):
 class Devolucion(PydanticBaseModel):
     libro_id: int
     usuario_id: int
+
+
+class PrestamoHistorial(PydanticBaseModel):
+    libro: str
+    fecha_prestamo: str
+    fecha_devolucion: str | None = None
+    activo: bool
+
+
+class HistorialUsuario(PydanticBaseModel):
+    usuario_id: int
+    usuario_nombre: str
+    historial: List[PrestamoHistorial] = []
 
 
 app = FastAPI(
@@ -157,12 +171,15 @@ def realizar_prestamo(prestamo: Prestamo, db: Session = Depends(get_db)):
     nuevo_prestamo = PrestamoDB(
         libro_id=prestamo.libro_id,
         usuario_id=prestamo.usuario_id,
-        activo=True
+        activo=True,
+        fecha_prestamo=date.today(),
+        fecha_devolucion=None
     )
 
     libro.disponible = False
 
     db.add(nuevo_prestamo)
+    db.add(libro)
     db.commit()
     db.refresh(nuevo_prestamo)
 
@@ -188,6 +205,7 @@ def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Libro no encontrado")
 
     prestamo_activo.activo = False
+    prestamo_activo.fecha_devolucion = date.today()
     libro.disponible = True
 
     db.add(prestamo_activo)
@@ -204,3 +222,42 @@ def devolver_libro(devolucion: Devolucion, db: Session = Depends(get_db)):
         "mensaje": "Devolución registrada correctamente",
         "libro_estado": libro.disponible
     }
+
+
+@app.get("/usuarios/{usuario_id}/prestamos", response_model=HistorialUsuario)
+def consultar_historial_prestamos(usuario_id: int, db: Session = Depends(get_db)):
+    usuario = db.query(UsuarioDB).filter(UsuarioDB.id == usuario_id).first()
+
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    prestamos = db.query(PrestamoDB).filter(
+        PrestamoDB.usuario_id == usuario_id
+    ).all()
+
+    if not prestamos:
+        return HistorialUsuario(
+            usuario_id=usuario.id,
+            usuario_nombre=usuario.nombre,
+            historial=[]
+        )
+
+    historial = []
+
+    for prestamo in prestamos:
+        libro = db.query(LibroDB).filter(LibroDB.id == prestamo.libro_id).first()
+
+        historial.append(
+            PrestamoHistorial(
+                libro=libro.titulo if libro else "Libro desconocido",
+                fecha_prestamo=str(prestamo.fecha_prestamo),
+                fecha_devolucion=str(prestamo.fecha_devolucion) if prestamo.fecha_devolucion else None,
+                activo=prestamo.activo
+            )
+        )
+
+    return HistorialUsuario(
+        usuario_id=usuario.id,
+        usuario_nombre=usuario.nombre,
+        historial=historial
+    )
