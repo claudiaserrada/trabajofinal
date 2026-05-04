@@ -27,7 +27,7 @@ class PrestamoDB(Base):
     libro_id = Column(Integer, ForeignKey("libros.id"), nullable=False)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
 
-    # 🔥 IMPORTANTE PARA HU-06
+    
     activo = Column(Boolean, default=True)
 
     fecha_prestamo = Column(Date, nullable=False)
